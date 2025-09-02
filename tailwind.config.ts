@@ -52,6 +52,19 @@ export default {
 					DEFAULT: 'hsl(var(--card))',
 					foreground: 'hsl(var(--card-foreground))'
 				},
+				legal: {
+					primary: 'hsl(var(--legal-primary))',
+					secondary: 'hsl(var(--legal-secondary))',
+					warning: 'hsl(var(--legal-warning))',
+					danger: 'hsl(var(--legal-danger))',
+					success: 'hsl(var(--legal-success))',
+					info: 'hsl(var(--legal-info))'
+				},
+				risk: {
+					low: 'hsl(var(--risk-low))',
+					medium: 'hsl(var(--risk-medium))',
+					high: 'hsl(var(--risk-high))'
+				},
 				sidebar: {
 					DEFAULT: 'hsl(var(--sidebar-background))',
 					foreground: 'hsl(var(--sidebar-foreground))',
