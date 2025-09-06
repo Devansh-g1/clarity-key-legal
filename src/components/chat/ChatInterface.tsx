@@ -7,6 +7,8 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { queryDocument } from "@/lib/google-cloud";
+import { useAuth } from "@/context/AuthContext";
+import { apiFetch } from "@/lib/api";
 
 interface Message {
   id: string;
@@ -22,10 +24,13 @@ interface ChatInterfaceProps {
 }
 
 export const ChatInterface = ({ documentId, className }: ChatInterfaceProps) => {
+  const { getIdToken, user } = useAuth();
   const [messages, setMessages] = useState<Message[]>([
     {
       id: '1',
-      content: "Hi! I'm your legal document assistant. I can help you understand your contract by answering questions about clauses, risks, obligations, and terms. What would you like to know?",
+      content: documentId 
+        ? "Hi! I'm your legal document assistant. I can help you understand your uploaded contract by answering questions about clauses, risks, obligations, and terms. What would you like to know?"
+        : "Hi! I'm your legal document assistant. Upload a document first, then I can help you understand it by answering questions about clauses, risks, obligations, and terms.",
       sender: 'assistant',
       timestamp: new Date(),
     }
@@ -35,10 +40,12 @@ export const ChatInterface = ({ documentId, className }: ChatInterfaceProps) => 
   const scrollAreaRef = useRef<HTMLDivElement>(null);
 
   const suggestedQuestions = [
-    "When does the lease renew?",
-    "Can the landlord increase rent?",
-    "Can rent be increased during the lease?",
-    "What happens if I miss a payment?"
+    "What are the main risks in this document?",
+    "What are my key obligations?",
+    "When does this contract expire?",
+    "What happens if I break the agreement?",
+    "Are there any hidden fees or costs?",
+    "What are the termination conditions?"
   ];
 
   useEffect(() => {
@@ -50,6 +57,24 @@ export const ChatInterface = ({ documentId, className }: ChatInterfaceProps) => 
   const handleSendMessage = async (messageContent?: string) => {
     const content = messageContent || input;
     if (!content.trim() || isLoading) return;
+
+    // If no document is uploaded, provide helpful guidance
+    if (!documentId) {
+      const guidanceMessage: Message = {
+        id: Date.now().toString(),
+        content: "Please upload a document first by going to the Upload page. Once you've uploaded a legal document, I'll be able to analyze it and answer your questions about its contents, risks, and obligations.",
+        sender: 'assistant',
+        timestamp: new Date(),
+      };
+      setMessages(prev => [...prev, {
+        id: (Date.now() - 1).toString(),
+        content,
+        sender: 'user',
+        timestamp: new Date(),
+      }, guidanceMessage]);
+      setInput('');
+      return;
+    }
 
     const userMessage: Message = {
       id: Date.now().toString(),
@@ -63,12 +88,26 @@ export const ChatInterface = ({ documentId, className }: ChatInterfaceProps) => 
     setIsLoading(true);
 
     try {
-      // Query the document using grounded AI
-      const response = await queryDocument(content, documentId || 'default', 'user123');
+      let aiAnswer = '';
+      if (user) {
+        const token = await getIdToken();
+        try {
+          const data = await apiFetch('/query', {
+            method: 'POST',
+            body: JSON.stringify({ query: content, documentId: documentId || 'default' }),
+          }, token);
+          aiAnswer = data.answer;
+        } catch (apiError) {
+          // Fallback to mock if API fails
+          aiAnswer = await queryDocument(content, documentId || 'default', user.uid);
+        }
+      } else {
+        aiAnswer = await queryDocument(content, documentId || 'default', 'anonymous');
+      }
       
       const assistantMessage: Message = {
         id: (Date.now() + 1).toString(),
-        content: response,
+        content: aiAnswer,
         sender: 'assistant',
         timestamp: new Date(),
         sources: ['Section 3.2', 'Payment Terms']
@@ -97,9 +136,9 @@ export const ChatInterface = ({ documentId, className }: ChatInterfaceProps) => 
   };
 
   return (
-    <Card className={cn("flex flex-col h-full", className)}>
+    <Card className={cn("flex flex-col h-full max-h-[600px]", className)}>
       {/* Header */}
-      <div className="p-4 border-b">
+      <div className="p-4 border-b flex-shrink-0">
         <div className="flex items-center justify-between">
           <h3 className="font-semibold text-foreground">Ask the Contract</h3>
           <div className="flex space-x-1">
@@ -111,7 +150,7 @@ export const ChatInterface = ({ documentId, className }: ChatInterfaceProps) => 
 
       {/* Messages */}
       <ScrollArea className="flex-1 p-4" ref={scrollAreaRef}>
-        <div className="space-y-4">
+        <div className="space-y-4 min-h-0">
           {messages.map((message) => (
             <div
               key={message.id}
@@ -158,7 +197,7 @@ export const ChatInterface = ({ documentId, className }: ChatInterfaceProps) => 
 
       {/* Suggested Questions */}
       {messages.length === 1 && (
-        <div className="p-4 border-t bg-muted/30">
+        <div className="p-4 border-t bg-muted/30 flex-shrink-0">
           <p className="text-sm text-muted-foreground mb-2">Suggested questions:</p>
           <div className="space-y-1">
             {suggestedQuestions.map((question, index) => (
@@ -177,10 +216,12 @@ export const ChatInterface = ({ documentId, className }: ChatInterfaceProps) => 
       )}
 
       {/* Input */}
-      <div className="p-4 border-t">
+      <div className="p-4 border-t flex-shrink-0">
         <div className="flex items-center space-x-2">
           <div className="flex-1 relative">
             <Input
+              id="chat-input"
+              name="chat-input"
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyPress={handleKeyPress}

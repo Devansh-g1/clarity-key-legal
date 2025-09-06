@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import React from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -15,6 +16,7 @@ interface DashboardProps {
 
 export const Dashboard = ({ documentResult }: DashboardProps) => {
   const [activeTab, setActiveTab] = useState('overview');
+  const [documentName, setDocumentName] = useState('No document uploaded');
 
   // Mock data when no document is provided
   const mockResult: DocumentAnalysisResult = {
@@ -103,32 +105,39 @@ export const Dashboard = ({ documentResult }: DashboardProps) => {
 
   const result = documentResult || mockResult;
 
+  // Update document name when a new document is uploaded
+  React.useEffect(() => {
+    if (documentResult) {
+      setDocumentName((documentResult as any).filename || `Document ${documentResult.id}`);
+    }
+  }, [documentResult]);
+
   return (
-    <div className="flex h-full">
+    <div className="flex h-full overflow-hidden">
       {/* Main Content */}
-      <div className="flex-1 flex flex-col">
+      <div className="flex-1 flex flex-col overflow-hidden">
         <Header 
-          title="Acme Lease V3.pdf" 
-          subtitle="Document analysis complete - Review the details below"
+          title={documentName} 
+          subtitle={documentResult ? "Document analysis complete - Review the details below" : "Upload a document to get started"}
         />
         
-        <div className="flex-1 p-6">
+        <div className="flex-1 p-6 overflow-y-auto">
           <div className="flex items-center justify-between mb-6">
             <div className="flex items-center space-x-4">
               <div className="flex items-center space-x-2">
-                <div className="text-2xl font-bold">7+- 6+1:</div>
-                <Badge variant="outline">Gradlic</Badge>
-                <Badge variant="secondary">Summer</Badge>
+                <div className="text-2xl font-bold">Risk Score:</div>
+                <Badge variant="outline">Medium</Badge>
+                <Badge variant="secondary">Lease Agreement</Badge>
               </div>
               <div className="flex items-center space-x-2">
-                <Progress value={54} className="w-24" />
-                <span className="text-sm font-medium">54%</span>
+                <Progress value={result.riskAssessment.score} className="w-24" />
+                <span className="text-sm font-medium">{result.riskAssessment.score}%</span>
               </div>
             </div>
             <div className="flex items-center space-x-2 text-sm text-muted-foreground">
               <Clock className="h-4 w-4" />
-              <span>3:3:0 mmon</span>
-              <span>• dator</span>
+              <span>Analysis completed</span>
+              <span>• {new Date().toLocaleDateString()}</span>
             </div>
           </div>
 
@@ -270,27 +279,33 @@ export const Dashboard = ({ documentResult }: DashboardProps) => {
                 {/* Risk Summary */}
                 <Card>
                   <CardHeader>
-                    <CardTitle className="text-base">Abgrev</CardTitle>
+                    <CardTitle className="text-base">Risk Summary</CardTitle>
                   </CardHeader>
                   <CardContent>
                     <div className="space-y-4">
                       <div className="flex items-center justify-between">
-                        <span className="text-sm">Risk Level</span>
+                        <span className="text-sm">Overall Risk</span>
                         <div className="flex items-center space-x-2">
-                          <Badge variant="destructive" className="text-xs">High</Badge>
-                          <span className="text-xs text-muted-foreground">It Says</span>
+                          <Badge variant={result.riskAssessment.overall === 'high' ? 'destructive' : result.riskAssessment.overall === 'medium' ? 'default' : 'secondary'} className="text-xs">
+                            {result.riskAssessment.overall.toUpperCase()}
+                          </Badge>
+                          <span className="text-xs text-muted-foreground">Risk Level</span>
                         </div>
                       </div>
                       
                       <div className="space-y-2">
-                        <div className="flex items-center justify-between text-sm">
-                          <span>Af - bot renevel</span>
-                          <Badge variant="secondary">Medium</Badge>
-                        </div>
+                        {result.riskAssessment.factors.map((factor, index) => (
+                          <div key={index} className="flex items-center justify-between text-sm">
+                            <span>{factor.category}</span>
+                            <Badge variant={factor.risk === 'high' ? 'destructive' : factor.risk === 'medium' ? 'default' : 'secondary'}>
+                              {factor.risk}
+                            </Badge>
+                          </div>
+                        ))}
                         <ul className="text-xs text-muted-foreground space-y-1 ml-4">
-                          <li>• What it saff a</li>
-                          <li>Lony fae carm</li>
-                          <li>• Why it matte's</li>
+                          {result.summary.riskHighlights.map((highlight, index) => (
+                            <li key={index}>• {highlight}</li>
+                          ))}
                         </ul>
                       </div>
                     </div>
@@ -300,9 +315,9 @@ export const Dashboard = ({ documentResult }: DashboardProps) => {
                 {/* Obligations Timeline */}
                 <Card>
                   <CardHeader>
-                    <CardTitle className="text-base">Obligations timeline</CardTitle>
+                    <CardTitle className="text-base">Important Dates</CardTitle>
                     <div className="flex items-center justify-between text-sm">
-                      <span>30-day notice deadline</span>
+                      <span>Key deadlines and dates</span>
                       <span>Export to calendar</span>
                     </div>
                   </CardHeader>
@@ -310,15 +325,18 @@ export const Dashboard = ({ documentResult }: DashboardProps) => {
                     <div className="space-y-4">
                       <Progress value={75} className="h-2" />
                       <div className="flex justify-between text-xs text-muted-foreground">
-                        <span>30-day notice deadline</span>
-                        <span>Lease end d...</span>
+                        <span>Contract start</span>
+                        <span>Contract end</span>
                       </div>
                       
                       <div className="space-y-2">
-                        <div className="flex items-center space-x-2 text-sm">
-                          <Calendar className="h-4 w-4" />
-                          <span>Lease end date</span>
-                        </div>
+                        {result.summary.importantDates.map((date, index) => (
+                          <div key={index} className="flex items-center space-x-2 text-sm">
+                            <Calendar className="h-4 w-4" />
+                            <span>{date.description}</span>
+                            <Badge variant="outline" className="text-xs">{date.date}</Badge>
+                          </div>
+                        ))}
                       </div>
                     </div>
                   </CardContent>
@@ -330,8 +348,8 @@ export const Dashboard = ({ documentResult }: DashboardProps) => {
       </div>
 
       {/* Chat Interface */}
-      <div className="w-80 border-l border-border">
-        <ChatInterface documentId={result.id} />
+      <div className="w-80 border-l border-border overflow-hidden">
+        <ChatInterface documentId={documentResult ? result.id : undefined} />
       </div>
     </div>
   );

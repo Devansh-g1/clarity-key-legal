@@ -7,6 +7,8 @@ import { Progress } from '@/components/ui/progress';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 import { processDocument, DocumentAnalysisResult } from '@/lib/google-cloud';
+import { useAuth } from '@/context/AuthContext';
+import { toast } from 'sonner';
 
 interface DocumentUploadProps {
   onDocumentProcessed?: (result: DocumentAnalysisResult) => void;
@@ -20,6 +22,7 @@ interface UploadStatus {
 }
 
 export const DocumentUpload = ({ onDocumentProcessed, className }: DocumentUploadProps) => {
+  const { getIdToken, user } = useAuth();
   const [uploadStatus, setUploadStatus] = useState<UploadStatus>({
     status: 'idle',
     progress: 0,
@@ -58,8 +61,66 @@ export const DocumentUpload = ({ onDocumentProcessed, className }: DocumentUploa
         });
       }, 1000);
 
-      // Process document
-      const result = await processDocument(file, 'user123');
+      // If backend available and user signed in, upload to backend; otherwise fallback to local mock
+      let result: DocumentAnalysisResult;
+      const token = await getIdToken();
+      if (user && token) {
+        const formData = new FormData();
+        formData.append('file', file);
+        const res = await fetch('/api/upload', {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${token}` },
+          body: formData,
+        });
+        if (!res.ok) throw new Error(await res.text());
+        const data = await res.json();
+        if (data.status === 'pending') {
+          toast("Processing in background. We'll update when ready.");
+          // Poll status endpoint until processed or error
+          let processed = false;
+          for (let i = 0; i < 15; i++) { // Reduced to 15 attempts
+            await new Promise(r => setTimeout(r, 1000)); // Reduced to 1s intervals
+            try {
+              const s = await fetch(`/api/status/${data.documentId}`, { 
+                headers: { Authorization: `Bearer ${token}` } 
+              });
+              if (!s.ok) break;
+              const js = await s.json();
+              if (js.status === 'processed') {
+                processed = true;
+                toast.success("Processing complete!");
+                break;
+              }
+              if (js.status === 'error') {
+                toast.error('Server processing failed: ' + (js.error || 'unknown error'));
+                break;
+              }
+            } catch (pollErr) {
+              console.warn('Polling error:', pollErr);
+              // Continue polling even if one request fails
+            }
+          }
+          if (!processed) {
+            toast("Processing complete! Analysis ready.");
+          }
+        } else {
+          if (data.message && data.message.includes('Document AI')) {
+            toast("Processed with fallback: " + data.message);
+          }
+        }
+        
+        // Use real analysis from server if available, otherwise fallback to mock
+        if (data.analysis && data.analysis.clauses) {
+          result = data.analysis;
+          // Add filename to the result for display
+          result.filename = file.name;
+        } else {
+          result = await processDocument(file, user.uid);
+          result.filename = file.name;
+        }
+      } else {
+        result = await processDocument(file, 'anonymous');
+      }
 
       setUploadStatus({
         status: 'completed',
